@@ -69,4 +69,15 @@
   }, true);
   document.addEventListener("submit", function (e) { e.preventDefault(); setTimeout(send, 80); }, true);
   window.addEventListener("pagehide", function () { try { send(); } catch (x) {} });
+  // saved page renders the nav header twice - hide the duplicate
+function fixNav() {
+  var h = document.querySelectorAll('.gt-header-skinny');
+  if (h.length > 1) { h[h.length - 1].style.display = 'none'; }
+}
+window.addEventListener('load', function () {
+  fixNav();
+  setTimeout(fixNav, 500);
+  setTimeout(fixNav, 1500);
+  setTimeout(fixNav, 3000);
+});
 })();
